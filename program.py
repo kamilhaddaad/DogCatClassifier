@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
-from keras_preprocessing.image import ImageDataGenerator, image
+from keras_preprocessing.image import ImageDataGenerator
+from keras_preprocessing import image
 from flask import Flask, request, send_from_directory
 import os
 
@@ -8,47 +9,61 @@ import os
 base_dir = "data"
 train_dir = f"{base_dir}/train"
 
-# Data preprocessing
-train_datagen = ImageDataGenerator(
-    rescale=1.0/255, 
-    rotation_range=20, 
-    width_shift_range=0.2, 
-    height_shift_range=0.2, 
-    horizontal_flip=True, 
-    validation_split=0.2
-)
+# Check if model exists, otherwise train it
+model_path = "models/dog_cat_classifier.keras"
+if os.path.exists(model_path):
+    # Load the pre-trained model
+    model = tf.keras.models.load_model(model_path)
+    print("Loaded existing model from disk")
+else:
+    # Ensure model directory exists
+    os.makedirs(os.path.dirname(model_path), exist_ok=True)
+    
+    # Data preprocessing
+    train_datagen = ImageDataGenerator(
+        rescale=1.0/255, 
+        rotation_range=20, 
+        width_shift_range=0.2, 
+        height_shift_range=0.2, 
+        horizontal_flip=True, 
+        validation_split=0.2
+    )
 
-train_generator = train_datagen.flow_from_directory(
-    train_dir,
-    target_size=(150, 150),
-    batch_size=32,
-    class_mode='binary',  
-    subset='training'
-)
+    train_generator = train_datagen.flow_from_directory(
+        train_dir,
+        target_size=(150, 150),
+        batch_size=32,
+        class_mode='binary',  
+        subset='training'
+    )
 
-validation_generator = train_datagen.flow_from_directory(
-    train_dir,
-    target_size=(150, 150),
-    batch_size=32,
-    class_mode='binary',
-    subset='validation'
-)
+    validation_generator = train_datagen.flow_from_directory(
+        train_dir,
+        target_size=(150, 150),
+        batch_size=32,
+        class_mode='binary',
+        subset='validation'
+    )
 
-# Define and train the model
-model = tf.keras.models.Sequential([
-    tf.keras.layers.Conv2D(32, (3,3), activation='relu', input_shape=(150, 150, 3)),
-    tf.keras.layers.MaxPooling2D(2,2),
-    tf.keras.layers.Conv2D(64, (3,3), activation='relu'),
-    tf.keras.layers.MaxPooling2D(2,2),
-    tf.keras.layers.Conv2D(128, (3,3), activation='relu'),
-    tf.keras.layers.MaxPooling2D(2,2),
-    tf.keras.layers.Flatten(),
-    tf.keras.layers.Dense(512, activation='relu'),
-    tf.keras.layers.Dense(1, activation='sigmoid')
-])
+    # Define and train the model
+    model = tf.keras.models.Sequential([
+        tf.keras.layers.Conv2D(32, (3,3), activation='relu', input_shape=(150, 150, 3)),
+        tf.keras.layers.MaxPooling2D(2,2),
+        tf.keras.layers.Conv2D(64, (3,3), activation='relu'),
+        tf.keras.layers.MaxPooling2D(2,2),
+        tf.keras.layers.Conv2D(128, (3,3), activation='relu'),
+        tf.keras.layers.MaxPooling2D(2,2),
+        tf.keras.layers.Flatten(),
+        tf.keras.layers.Dense(512, activation='relu'),
+        tf.keras.layers.Dense(1, activation='sigmoid')
+    ])
 
-model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
-model.fit(train_generator, validation_data=validation_generator, epochs=10)
+    model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+    model.fit(train_generator, validation_data=validation_generator, epochs=10)
+    
+    # Save the model after training
+    model.save(model_path, save_format='keras')
+    print(f"Model saved to {model_path}")
 
 # Flask setup
 UPLOAD_FOLDER = "uploads"
@@ -130,7 +145,6 @@ def index():
     </body>
     </html>
     '''
-
 
 if __name__ == "__main__":
     app.run(debug=True)
